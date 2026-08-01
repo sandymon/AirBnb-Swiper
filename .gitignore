@@ -2,6 +2,9 @@ images/
 stayscout.db
 stayscout.db-wal
 stayscout.db-shm
+stayscout.seed.db
+stayscout.seed.db-wal
+stayscout.seed.db-shm
 .env
 *.log
 examplearibnblsiitng.txt
