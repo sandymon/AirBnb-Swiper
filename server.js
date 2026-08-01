@@ -14,6 +14,7 @@ const db = require("./db");
 
 const port = Number(process.env.PORT) || 5173;
 const root = __dirname;
+const allowRemoveListings = String(process.env.ALLOW_REMOVE_LISTINGS ?? "true").toLowerCase() !== "false";
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -111,6 +112,7 @@ function handleGetConfig(response) {
   sendJson(response, 200, {
     googleMapsApiKey,
     hasGoogleMapsKey: Boolean(googleMapsApiKey),
+    allowRemoveListings,
   });
 }
 
@@ -126,7 +128,7 @@ async function handleSaveListings(request, response) {
   try {
     const rawBody = await readRequestBody(request);
     const body = rawBody ? JSON.parse(rawBody) : {};
-    const count = db.replaceListings(body.listings || []);
+    const count = db.replaceListings(body.listings || [], { preserveExisting: !allowRemoveListings });
     sendJson(response, 200, { ok: true, count });
   } catch (error) {
     sendJson(response, 400, { error: error.message });
@@ -227,5 +229,8 @@ server.listen(port, () => {
     console.log("Google Maps travel times enabled via GOOGLE_MAPS_API_KEY.");
   } else {
     console.log("Using free OSRM routing. Set GOOGLE_MAPS_API_KEY for Google Maps.");
+  }
+  if (!allowRemoveListings) {
+    console.log("ALLOW_REMOVE_LISTINGS=false — listing removal is disabled; voting still works.");
   }
 });

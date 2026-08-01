@@ -28,7 +28,7 @@ db.exec(`
 `);
 
 const statements = {
-  selectListings: db.prepare("SELECT data FROM listings ORDER BY position ASC"),
+  selectListings: db.prepare("SELECT id, data FROM listings ORDER BY position ASC"),
   deleteAllListings: db.prepare("DELETE FROM listings"),
   insertListing: db.prepare("INSERT INTO listings (id, data, position) VALUES (?, ?, ?)"),
   selectSetting: db.prepare("SELECT value FROM settings WHERE key = ?"),
@@ -136,13 +136,36 @@ function getState() {
   };
 }
 
-function replaceListings(items) {
-  const list = Array.isArray(items) ? items : [];
+// When preserveExisting is set (ALLOW_REMOVE_LISTINGS=false), any listing
+// currently stored but missing from `items` is kept rather than dropped, so
+// the public-facing app can't remove listings — only add/edit/vote on them.
+function replaceListings(items, { preserveExisting = false } = {}) {
+  const incoming = Array.isArray(items) ? items : [];
+  let finalList = incoming;
 
   db.exec("BEGIN");
   try {
+    if (preserveExisting) {
+      const incomingIds = new Set(
+        incoming.filter((listing) => listing?.id != null).map((listing) => String(listing.id)),
+      );
+      const preserved = statements.selectListings
+        .all()
+        .filter((row) => !incomingIds.has(String(row.id)))
+        .map((row) => {
+          try {
+            return JSON.parse(row.data);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+
+      finalList = [...incoming, ...preserved];
+    }
+
     statements.deleteAllListings.run();
-    list.forEach((listing, index) => {
+    finalList.forEach((listing, index) => {
       if (listing && listing.id != null) {
         statements.insertListing.run(String(listing.id), JSON.stringify(listing), index);
       }
@@ -154,7 +177,7 @@ function replaceListings(items) {
   }
 
   statements.deleteVotesNotInListings.run();
-  return list.length;
+  return finalList.length;
 }
 
 function saveSettings(partial = {}) {

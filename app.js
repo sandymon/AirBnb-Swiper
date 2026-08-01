@@ -188,6 +188,7 @@ let voterId = "";
 let selectedAnchorId = "";
 let mapsSettings = {};
 let serverGoogleKey = "";
+let allowRemoveListings = true;
 let hydrating = true;
 let placesAutocomplete = null;
 let googleMapsLoadPromise = null;
@@ -890,6 +891,7 @@ async function loadServerConfig() {
   try {
     const config = await api.getConfig();
     serverGoogleKey = config.googleMapsApiKey || "";
+    allowRemoveListings = config.allowRemoveListings !== false;
   } catch (error) {
     serverGoogleKey = "";
     console.error("StayScout: could not load server configuration.", error);
@@ -1744,6 +1746,9 @@ function populateListingDetail() {
   populateListingDetailAmenities(detailFields.amenities, listing);
   detailFields.link.href = listing.url || "#";
   applyVoteButton(detailFields.voteButton, listing);
+  if (detailFields.remove) {
+    detailFields.remove.hidden = !allowRemoveListings;
+  }
 
   const voterNames = formatVoterNames(listing.id);
   if (voterNames) {
@@ -1821,7 +1826,7 @@ function setupListingDetailOverlay() {
   });
 
   detailFields.remove?.addEventListener("click", async () => {
-    if (!detailContext) {
+    if (!detailContext || !allowRemoveListings) {
       return;
     }
 
@@ -2061,12 +2066,18 @@ function createListingCard(listing, anchorLabel, anchorId) {
     }
   });
 
-  card.querySelector(".remove-button").addEventListener("click", async () => {
-    listings = listings.filter((item) => item.id !== listing.id);
-    saveListings();
-    await refreshVotes();
-    render();
-  });
+  const removeButton = card.querySelector(".remove-button");
+  if (allowRemoveListings) {
+    removeButton.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      listings = listings.filter((item) => item.id !== listing.id);
+      saveListings();
+      await refreshVotes();
+      render();
+    });
+  } else {
+    removeButton.hidden = true;
+  }
 
   return card;
 }
