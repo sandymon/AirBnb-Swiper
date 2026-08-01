@@ -4,6 +4,8 @@ const selectedAnchorKey = "stayscout-selected-anchor";
 const mapsSettingsKey = "stayscout-maps-settings";
 const voterIdKey = "stayscout-voter-id";
 const voterNameKey = "stayscout-voter-name";
+const fullscreenDismissedKey = "stayscout-fullscreen-dismissed";
+const onboardingSeenKey = "stayscout-onboarding-seen";
 const SWIPE_THRESHOLD = 88;
 const SWIPE_OFF_RATIO = 1.15;
 
@@ -117,6 +119,16 @@ const settingsBtn = document.querySelector("#settingsBtn");
 const topBarTag = document.querySelector("#topBarTag");
 const listingDetailOverlay = document.querySelector("#listingDetailOverlay");
 const photoLightbox = document.querySelector("#photoLightbox");
+const fullscreenPrompt = document.querySelector("#fullscreenPrompt");
+const fullscreenEnableBtn = document.querySelector("#fullscreenEnableBtn");
+const fullscreenDismissBtn = document.querySelector("#fullscreenDismissBtn");
+const onboardingOverlay = document.querySelector("#onboardingOverlay");
+const onboardingSteps = [...(onboardingOverlay?.querySelectorAll(".onboarding-step") || [])];
+const onboardingDots = [...(onboardingOverlay?.querySelectorAll(".onboarding-dot") || [])];
+const onboardingBackBtn = document.querySelector("[data-onboarding-back]");
+const onboardingNextBtn = document.querySelector("[data-onboarding-next]");
+const onboardingSkipBtn = document.querySelector("[data-onboarding-skip]");
+const replayOnboardingBtn = document.querySelector("#replayOnboardingBtn");
 
 const detailFields = {
   panel: listingDetailOverlay?.querySelector(".listing-detail-panel"),
@@ -127,6 +139,8 @@ const detailFields = {
   galleryCounter: listingDetailOverlay?.querySelector(".gallery-counter"),
   galleryStage: listingDetailOverlay?.querySelector(".gallery-stage"),
   galleryFullscreen: listingDetailOverlay?.querySelector(".gallery-fullscreen"),
+  galleryRooms: listingDetailOverlay?.querySelector(".gallery-rooms"),
+  galleryCaption: listingDetailOverlay?.querySelector(".gallery-caption"),
   driveTime: listingDetailOverlay?.querySelector(".detail-drive-time"),
   priceBadge: listingDetailOverlay?.querySelector(".price-badge"),
   price: listingDetailOverlay?.querySelector(".detail-price"),
@@ -238,6 +252,123 @@ function setupSettingsOverlay() {
       closeSettings();
     }
   });
+}
+
+function supportsFullscreen() {
+  return Boolean(document.documentElement.requestFullscreen);
+}
+
+function updateFullscreenPrompt() {
+  if (!fullscreenPrompt) {
+    return;
+  }
+
+  const dismissed = localStorage.getItem(fullscreenDismissedKey) === "1";
+  fullscreenPrompt.hidden = !supportsFullscreen() || Boolean(document.fullscreenElement) || dismissed;
+}
+
+async function enterFullscreen() {
+  try {
+    await document.documentElement.requestFullscreen();
+  } catch (error) {
+    setTravelStatus(`Could not enter fullscreen: ${error.message}`, true);
+  }
+}
+
+function setupFullscreenPrompt() {
+  if (!fullscreenPrompt) {
+    return;
+  }
+
+  fullscreenEnableBtn?.addEventListener("click", enterFullscreen);
+  fullscreenDismissBtn?.addEventListener("click", () => {
+    localStorage.setItem(fullscreenDismissedKey, "1");
+    updateFullscreenPrompt();
+  });
+
+  document.addEventListener("fullscreenchange", updateFullscreenPrompt);
+  updateFullscreenPrompt();
+}
+
+let onboardingStepIndex = 0;
+
+function renderOnboardingStep() {
+  onboardingSteps.forEach((step, index) => {
+    step.classList.toggle("is-active", index === onboardingStepIndex);
+  });
+
+  onboardingDots.forEach((dot, index) => {
+    dot.classList.toggle("is-active", index === onboardingStepIndex);
+  });
+
+  if (onboardingBackBtn) {
+    onboardingBackBtn.hidden = onboardingStepIndex === 0;
+  }
+
+  if (onboardingNextBtn) {
+    onboardingNextBtn.textContent =
+      onboardingStepIndex === onboardingSteps.length - 1 ? "Start swiping" : "Next";
+  }
+}
+
+function openOnboarding() {
+  if (!onboardingOverlay) {
+    return;
+  }
+
+  onboardingStepIndex = 0;
+  renderOnboardingStep();
+  onboardingOverlay.hidden = false;
+  document.body.classList.add("onboarding-open");
+  onboardingOverlay.querySelector(".onboarding-panel")?.focus();
+}
+
+function closeOnboarding() {
+  if (!onboardingOverlay) {
+    return;
+  }
+
+  onboardingOverlay.hidden = true;
+  document.body.classList.remove("onboarding-open");
+  localStorage.setItem(onboardingSeenKey, "1");
+}
+
+function setupOnboarding() {
+  if (!onboardingOverlay) {
+    return;
+  }
+
+  onboardingNextBtn?.addEventListener("click", () => {
+    if (onboardingStepIndex >= onboardingSteps.length - 1) {
+      closeOnboarding();
+      return;
+    }
+
+    onboardingStepIndex += 1;
+    renderOnboardingStep();
+  });
+
+  onboardingBackBtn?.addEventListener("click", () => {
+    onboardingStepIndex = Math.max(0, onboardingStepIndex - 1);
+    renderOnboardingStep();
+  });
+
+  onboardingSkipBtn?.addEventListener("click", closeOnboarding);
+
+  replayOnboardingBtn?.addEventListener("click", () => {
+    closeSettings();
+    openOnboarding();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!onboardingOverlay.hidden && event.key === "Escape") {
+      closeOnboarding();
+    }
+  });
+
+  if (!localStorage.getItem(onboardingSeenKey)) {
+    openOnboarding();
+  }
 }
 
 function setTravelStatus(message, isError = false) {
@@ -1289,30 +1420,59 @@ function renderLeaderboard(settings) {
   });
 }
 
-function getListingPhotoSources(listing) {
+// Resolves one remote listing-photo URL to its cached local file, using the
+// URL-keyed map from the latest /api/cache-images call. Falls back to the old
+// positional localImages array for listings cached before that map existed.
+function resolvePhotoSrc(listing, remoteUrl, indexInImages) {
+  const local = listing.localImageMap?.[remoteUrl];
+  if (local) {
+    return local;
+  }
+
+  return listing.localImages?.[indexInImages] || remoteUrl;
+}
+
+function getListingPhotoList(listing) {
   const seen = new Set();
-  const sources = [];
+  const photos = [];
 
   const add = (src) => {
     if (src && !seen.has(src)) {
       seen.add(src);
-      sources.push(src);
+      photos.push(src);
     }
   };
 
-  (listing.localImages || []).forEach(add);
+  (listing.images || []).forEach((url, index) => add(resolvePhotoSrc(listing, url, index)));
   add(listing.image);
-  (listing.images || []).forEach(add);
+  (listing.localImages || []).forEach(add);
 
-  return sources;
+  return photos;
+}
+
+function getListingPhotoGroups(listing) {
+  if (!listing.photoRooms?.some((group) => group.room)) {
+    return null;
+  }
+
+  const groups = listing.photoRooms
+    .map((group) => ({
+      room: group.room,
+      photos: (group.images || [])
+        .map((url) => resolvePhotoSrc(listing, url, (listing.images || []).indexOf(url)))
+        .filter(Boolean),
+    }))
+    .filter((group) => group.photos.length);
+
+  return groups.length ? groups : null;
 }
 
 function getListingImage(listing) {
-  return getListingPhotoSources(listing)[0] || "";
+  return getListingPhotoList(listing)[0] || "";
 }
 
 function fillListingPhoto(photo, photoEmpty, listing, onNoPhoto) {
-  const sources = getListingPhotoSources(listing);
+  const sources = getListingPhotoList(listing);
 
   if (!sources.length) {
     photo.remove();
@@ -1350,27 +1510,17 @@ function fillListingPhoto(photo, photoEmpty, listing, onNoPhoto) {
   trySource();
 }
 
-function getListingPhotos(listing) {
-  const seen = new Set();
-  const photos = [];
-  const local = listing.localImages?.filter(Boolean) || [];
-  const remote = listing.images?.filter(Boolean) || [];
-
-  const addPhoto = (src) => {
-    if (src && !seen.has(src)) {
-      seen.add(src);
-      photos.push(src);
+// With no roomKey (or when that room can't be found), returns every photo in
+// listing order — the flat fallback used whenever a listing has no room data.
+function getListingPhotos(listing, roomKey) {
+  if (roomKey) {
+    const match = getListingPhotoGroups(listing)?.find((group) => group.room === roomKey);
+    if (match) {
+      return match.photos;
     }
-  };
-
-  const maxLen = Math.max(local.length, remote.length);
-  for (let i = 0; i < maxLen; i++) {
-    addPhoto(local[i] || remote[i]);
   }
 
-  addPhoto(listing.image);
-
-  return photos;
+  return getListingPhotoList(listing);
 }
 
 function populateListingDetailFacts(container, listing) {
@@ -1406,14 +1556,84 @@ function populateListingDetailAmenities(container, listing) {
   });
 }
 
+const UNCATEGORIZED_ROOM_KEY = "__uncategorized__";
+
+// Looks up the caption Airbnb showed for this specific photo in the photo tour,
+// by matching the resolved (possibly locally-cached) src back to its remote URL.
+function getPhotoCaption(listing, src) {
+  if (!src || !listing.photoRooms?.length) {
+    return "";
+  }
+
+  const index = (listing.images || []).findIndex(
+    (url, i) => resolvePhotoSrc(listing, url, i) === src,
+  );
+  const remoteUrl = index >= 0 ? listing.images[index] : src;
+
+  for (const group of listing.photoRooms) {
+    if (group.captions?.[remoteUrl]) {
+      return group.captions[remoteUrl];
+    }
+  }
+
+  return "";
+}
+
+function setGalleryRoomFilter(roomKey) {
+  if (!detailContext) {
+    return;
+  }
+
+  detailContext.roomFilter = roomKey;
+  detailContext.photoIndex = 0;
+  updateDetailGallery();
+}
+
+function renderGalleryRoomChips() {
+  if (!detailFields.galleryRooms) {
+    return;
+  }
+
+  const groups = getListingPhotoGroups(detailContext.listing);
+  detailFields.galleryRooms.replaceChildren();
+
+  if (!groups) {
+    detailFields.galleryRooms.hidden = true;
+    return;
+  }
+
+  detailFields.galleryRooms.hidden = false;
+
+  const makeChip = (label, key, count) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "gallery-room-chip";
+    chip.classList.toggle("gallery-room-chip--active", (detailContext.roomFilter || null) === key);
+    chip.textContent = `${label} (${count})`;
+    chip.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setGalleryRoomFilter(key);
+    });
+    detailFields.galleryRooms.append(chip);
+  };
+
+  makeChip("All", null, getListingPhotoList(detailContext.listing).length);
+  groups.forEach((group) => {
+    makeChip(group.room || "Other photos", group.room ?? UNCATEGORIZED_ROOM_KEY, group.photos.length);
+  });
+}
+
 function updateDetailGallery() {
   if (!detailContext) {
     return;
   }
 
-  const photos = getListingPhotos(detailContext.listing);
+  renderGalleryRoomChips();
+
+  const photos = getListingPhotos(detailContext.listing, detailContext.roomFilter);
   const hasPhotos = photos.length > 0;
-  const index = detailContext.photoIndex;
+  const index = photos.length ? Math.min(detailContext.photoIndex, photos.length - 1) : 0;
+  detailContext.photoIndex = index;
 
   detailFields.galleryImage.hidden = !hasPhotos;
   detailFields.galleryEmpty.hidden = hasPhotos;
@@ -1426,8 +1646,17 @@ function updateDetailGallery() {
     detailFields.galleryImage.src = photos[index];
     detailFields.galleryImage.alt = `${detailContext.listing.title} photo ${index + 1}`;
     detailFields.galleryCounter.textContent = `${index + 1} / ${photos.length}`;
+
+    const caption = getPhotoCaption(detailContext.listing, photos[index]);
+    if (detailFields.galleryCaption) {
+      detailFields.galleryCaption.textContent = caption;
+      detailFields.galleryCaption.hidden = !caption;
+    }
   } else {
     detailFields.galleryImage.removeAttribute("src");
+    if (detailFields.galleryCaption) {
+      detailFields.galleryCaption.hidden = true;
+    }
   }
 
   if (lightboxOpen) {
@@ -1440,7 +1669,7 @@ function shiftDetailPhoto(delta) {
     return;
   }
 
-  const photos = getListingPhotos(detailContext.listing);
+  const photos = getListingPhotos(detailContext.listing, detailContext.roomFilter);
   if (photos.length <= 1) {
     return;
   }
@@ -1455,7 +1684,7 @@ function updateLightbox() {
     return;
   }
 
-  const photos = getListingPhotos(detailContext.listing);
+  const photos = getListingPhotos(detailContext.listing, detailContext.roomFilter);
   if (!photos.length) {
     return;
   }
@@ -1474,7 +1703,7 @@ function openLightbox() {
     return;
   }
 
-  const photos = getListingPhotos(detailContext.listing);
+  const photos = getListingPhotos(detailContext.listing, detailContext.roomFilter);
   if (!photos.length) {
     return;
   }
@@ -1534,6 +1763,7 @@ function openListingDetail(listing, anchorLabel, anchorId, photoIndex = 0) {
     listing,
     anchorLabel,
     anchorId,
+    roomFilter: null,
     photoIndex: photos.length ? Math.min(photoIndex, photos.length - 1) : 0,
   };
 
@@ -1719,7 +1949,8 @@ async function cacheImagesForListing(listing) {
     }
 
     listing.localImages = data.localImages || [];
-    listing.image = listing.localImages[0] || listing.images[0];
+    listing.localImageMap = data.map || {};
+    listing.image = listing.localImageMap[listing.images[0]] || listing.localImages[0] || listing.images[0];
     saveListings();
   } catch {
     listing.image = listing.images[0];
@@ -1742,7 +1973,7 @@ function createListingCard(listing, anchorLabel, anchorId) {
 
   if (photoEl.isConnected) {
     photoEl.alt = listing.title;
-    const totalPhotos = getListingPhotoSources(listing).length;
+    const totalPhotos = getListingPhotoList(listing).length;
     if (totalPhotos > 1) {
       photoCount.textContent = `+${totalPhotos - 1} photos`;
     } else {
@@ -1886,6 +2117,7 @@ function createListingFromImport(imported) {
     images: imported.images || [],
     image: imported.images?.[0] || "",
     localImages: imported.localImages || [],
+    photoRooms: imported.rooms || [],
     times: buildDefaultTimes(imported.times),
   };
 }
@@ -1932,13 +2164,47 @@ function showPhotoMergeNotice(listing, addedCount) {
   notice.hidden = false;
 }
 
-async function mergePhotosIntoListing(existing, newImages) {
+// Merges same-named room buckets together and unions their photos, so re-running
+// the photo tour scraper (or scraping again after Airbnb reorders things) doesn't
+// duplicate or drop room groupings already saved on the listing.
+function mergePhotoRooms(existingRooms, newRooms) {
+  const merged = new Map();
+
+  (existingRooms || []).forEach((group) => {
+    merged.set(group.room ?? null, {
+      room: group.room ?? null,
+      images: [...(group.images || [])],
+      captions: { ...(group.captions || {}) },
+    });
+  });
+
+  (newRooms || []).forEach((group) => {
+    const key = group.room ?? null;
+    const bucket = merged.get(key) || { room: key, images: [], captions: {} };
+    const seen = new Set(bucket.images);
+
+    (group.images || []).forEach((url) => {
+      if (!seen.has(url)) {
+        seen.add(url);
+        bucket.images.push(url);
+      }
+    });
+
+    Object.assign(bucket.captions, group.captions || {});
+    merged.set(key, bucket);
+  });
+
+  return [...merged.values()];
+}
+
+async function mergePhotosIntoListing(existing, newImages, newRooms) {
   const previousCount = existing.images?.length || 0;
   const merged = [...new Set([...(existing.images || []), ...(newImages || [])])];
   const addedCount = merged.length - previousCount;
 
   existing.images = merged;
   existing.image = merged[0] || existing.image;
+  existing.photoRooms = mergePhotoRooms(existing.photoRooms, newRooms);
   saveListings();
   showPhotoMergeNotice(existing, addedCount);
   render();
@@ -1971,7 +2237,7 @@ async function importListing(imported) {
       return;
     }
 
-    await mergePhotosIntoListing(existing, imported.images);
+    await mergePhotosIntoListing(existing, imported.images, imported.rooms);
     return;
   }
 
@@ -2081,6 +2347,8 @@ async function migrateFromLocalStorage() {
 async function init() {
   setupListingDetailOverlay();
   setupSettingsOverlay();
+  setupFullscreenPrompt();
+  setupOnboarding();
   voterId = getVoterId();
 
   if (fields.voterNameInput) {

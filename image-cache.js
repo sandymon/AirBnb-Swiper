@@ -46,7 +46,7 @@ async function cacheListingImages(root, listingId, urls = []) {
 
   const uniqueUrls = [...new Set(urls.filter(isAllowedImageUrl))].slice(0, MAX_IMAGES);
   if (!uniqueUrls.length) {
-    return { localImages: [], cached: 0 };
+    return { localImages: [], map: {}, cached: 0 };
   }
 
   const listingDir = path.join(root, "images", safeId);
@@ -90,8 +90,18 @@ async function cacheListingImages(root, listingId, urls = []) {
   const workerCount = Math.min(DOWNLOAD_CONCURRENCY, uniqueUrls.length);
   await Promise.all(Array.from({ length: workerCount }, worker));
 
+  // `map` lets callers resolve a specific remote URL to its cached local path (or
+  // fall back to the remote URL when a download failed), instead of relying on
+  // array position, which drifts once any download in the batch fails.
+  const map = {};
+  uniqueUrls.forEach((remoteUrl, index) => {
+    if (results[index]) {
+      map[remoteUrl] = results[index];
+    }
+  });
+
   const localImages = results.filter(Boolean);
-  return { localImages, cached: localImages.length };
+  return { localImages, map, cached: localImages.length };
 }
 
 module.exports = {
