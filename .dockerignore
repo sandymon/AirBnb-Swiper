@@ -1,0 +1,12 @@
+.git
+.env
+node_modules
+images/
+stayscout.db
+stayscout.db-wal
+stayscout.db-shm
+*.log
+extension/
+scripts/
+examplearibnblsiitng.txt
+.agents/

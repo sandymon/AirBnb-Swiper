@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - STAYSCOUT_DB=/data/stayscout.db
+    volumes:
+      - stayscout_data:/data
+      - stayscout_images:/app/images
+    ports:
+      - "5173:5173"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+
+volumes:
+  stayscout_data:
+  stayscout_images:
