@@ -1,5 +1,7 @@
+if (!globalThis.__stayScoutImageExtractorReady) {
+globalThis.__stayScoutImageExtractorReady = true;
+
 const MAX_LISTING_IMAGES = 30;
-const MAX_PHOTO_TOUR_IMAGES = 50;
 
 function isListingPicturePath(url) {
   return (
@@ -153,11 +155,15 @@ function hostingIdFromUrl(url) {
   }
 }
 
+function imageKeyForUrl(url) {
+  return url.match(/\/original\/([^/?#]+)/)?.[1] || url;
+}
+
 function finalizeImageUrls(urls, hostingId, options = {}) {
   const maxImages = options.maxImages ?? MAX_LISTING_IMAGES;
   const requireHosting = options.requireHosting ?? true;
   const hostingKey = hostingId ? `Hosting-${hostingId}` : null;
-  const imageKey = (url) => url.match(/\/original\/([^/?#]+)/)?.[1] || url;
+  const imageKey = imageKeyForUrl;
   const seen = new Set();
   const unique = [];
 
@@ -194,53 +200,187 @@ function finalizeImageUrls(urls, hostingId, options = {}) {
   return unique.slice(0, maxImages);
 }
 
-function collectUrlsFromSrcset(srcset, urls) {
-  if (!srcset) {
-    return;
+const PAGINATION_RE = /^\d+\s*\/\s*\d+$/;
+const UNCATEGORIZED_ROOM = Symbol("uncategorized");
+// Airbnb labels every photo-tour image's alt/aria-label as "<Room name> image <N>"
+// (e.g. "Living room image 3"), including on the sidebar's jump-to-room thumbnails.
+// That's a far more reliable room signal than anything in the surrounding markup.
+const ROOM_ALT_RE = /^(.+?)\s+image\s+\d+$/i;
+
+function getQualifyingImageUrl(img) {
+  const candidates = [img.getAttribute("data-original-uri"), img.currentSrc, img.src];
+  for (const candidate of candidates) {
+    const normalized = normalizeHostingImageUrl(candidate);
+    if (normalized) {
+      return normalized;
+    }
   }
 
-  srcset.split(",").forEach((entry) => {
-    const normalized = normalizeHostingImageUrl(entry.trim().split(/\s+/)[0]);
-    if (normalized) {
-      urls.add(normalized);
+  const srcset = img.getAttribute("srcset");
+  if (srcset) {
+    for (const entry of srcset.split(",")) {
+      const normalized = normalizeHostingImageUrl(entry.trim().split(/\s+/)[0]);
+      if (normalized) {
+        return normalized;
+      }
     }
-  });
+  }
+
+  return null;
 }
 
-function extractImagesFromPhotoTourModal(modal, pageUrl) {
-  if (!modal) {
-    return [];
+function collectQualifyingImageElements(modal) {
+  const seen = new Set();
+  const result = [];
+
+  modal.querySelectorAll("img").forEach((img) => {
+    if (seen.has(img)) {
+      return;
+    }
+    const url = getQualifyingImageUrl(img);
+    if (url) {
+      seen.add(img);
+      result.push({ element: img, url });
+    }
+  });
+
+  return result;
+}
+
+function countQualifyingImages(node) {
+  let count = 0;
+  node.querySelectorAll("img").forEach((img) => {
+    if (getQualifyingImageUrl(img)) {
+      count += 1;
+    }
+  });
+  return count;
+}
+
+// Airbnb's photo tour markup uses generated, unstable class names, so instead of
+// selectors we climb from each photo to the smallest ancestor that still contains
+// exactly that one photo and has visible text alongside it (the caption/room label).
+function findPhotoTile(img, modal) {
+  let node = img.parentElement;
+  let depth = 0;
+
+  while (node && node !== modal && depth < 10) {
+    const count = countQualifyingImages(node);
+    if (count > 1) {
+      return null;
+    }
+    if (count === 1 && node.textContent.replace(/\s+/g, "").length > 0) {
+      return node;
+    }
+    node = node.parentElement;
+    depth += 1;
   }
 
-  const urls = new Set();
+  return null;
+}
+
+function collectTileTextLines(tile) {
+  const doc = tile.ownerDocument || document;
+  const walker = doc.createTreeWalker(tile, NodeFilter.SHOW_TEXT);
+  const lines = [];
+  let node = walker.nextNode();
+
+  while (node) {
+    const parentTag = node.parentElement?.tagName;
+    if (parentTag !== "SCRIPT" && parentTag !== "STYLE") {
+      const text = node.textContent.replace(/\s+/g, " ").trim();
+      if (text && !PAGINATION_RE.test(text) && lines[lines.length - 1] !== text) {
+        lines.push(text);
+      }
+    }
+    node = walker.nextNode();
+  }
+
+  return lines;
+}
+
+function getImageRoomLabel(img) {
+  const candidates = [img.alt, img.getAttribute("aria-label"), img.closest("button")?.getAttribute("aria-label")];
+
+  for (const raw of candidates) {
+    const match = (raw || "").match(ROOM_ALT_RE);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+// Best-effort only: most listings have no host-written photo captions at all, so
+// this simply grabs any leftover visible text near the photo that isn't just a
+// repeat of the room name already pulled from the image's alt text.
+function getPhotoCaption(img, modal, room) {
+  const tile = findPhotoTile(img, modal);
+  if (!tile) {
+    return null;
+  }
+
+  const lines = collectTileTextLines(tile).filter(
+    (line) => !room || line.toLowerCase() !== room.toLowerCase(),
+  );
+
+  return lines.length ? lines.join(" ") : null;
+}
+
+// Groups photo-tour images by the room/space Airbnb labels them with (e.g. "Living
+// room", "Bedroom 2"), so the app can show photos organized by space instead of one
+// flat list. Falls back to an "uncategorized" bucket when no label is detected for a
+// photo, and the caller should fall back further to the flat `images` list when
+// `rooms` never resolves any real room names at all.
+function extractRoomsFromPhotoTourModal(modal, pageUrl) {
+  if (!modal) {
+    return { images: [], rooms: [] };
+  }
+
   const hostingId = hostingIdFromUrl(pageUrl || globalThis.location?.href);
+  const seenKeys = new Set();
+  const orderedUrls = [];
+  const roomMap = new Map();
 
-  modal.querySelectorAll("img[data-original-uri]").forEach((img) => {
-    const normalized = normalizeHostingImageUrl(img.getAttribute("data-original-uri"));
-    if (normalized) {
-      urls.add(normalized);
+  collectQualifyingImageElements(modal).forEach(({ element, url }) => {
+    const key = imageKeyForUrl(url);
+    if (seenKeys.has(key)) {
+      return;
     }
-  });
+    seenKeys.add(key);
+    orderedUrls.push(url);
 
-  modal.querySelectorAll('img[src*="muscache.com/im/pictures"]').forEach((img) => {
-    const normalized = normalizeHostingImageUrl(
-      img.getAttribute("data-original-uri") || img.currentSrc || img.src,
-    );
-    if (normalized) {
-      urls.add(normalized);
+    const room = getImageRoomLabel(element);
+    const caption = getPhotoCaption(element, modal, room);
+    const bucket = room || UNCATEGORIZED_ROOM;
+
+    if (!roomMap.has(bucket)) {
+      roomMap.set(bucket, []);
     }
+    roomMap.get(bucket).push({ url, caption });
   });
 
-  modal.querySelectorAll('source[srcset*="muscache.com"], img[srcset*="muscache.com"]').forEach((element) => {
-    collectUrlsFromSrcset(element.getAttribute("srcset"), urls);
-  });
+  const rooms = [];
+  const images = [];
 
-  collectUrlsFromTextBlob(modal.innerHTML || "", urls);
+  for (const [bucket, photos] of roomMap) {
+    const captions = {};
+    photos.forEach((photo) => {
+      images.push(photo.url);
+      if (photo.caption) {
+        captions[photo.url] = photo.caption;
+      }
+    });
 
-  return finalizeImageUrls(urls, hostingId, {
-    maxImages: MAX_PHOTO_TOUR_IMAGES,
-    requireHosting: false,
-  });
+    rooms.push({
+      room: bucket === UNCATEGORIZED_ROOM ? null : bucket,
+      images: photos.map((photo) => photo.url),
+      captions,
+    });
+  }
+
+  return { images, rooms };
 }
 
 function extractImagesFromDocument(documentRef, pageUrl) {
@@ -282,11 +422,12 @@ function extractImagesFromDocument(documentRef, pageUrl) {
 
 globalThis.stayScoutImageExtractor = {
   MAX_LISTING_IMAGES,
-  MAX_PHOTO_TOUR_IMAGES,
   normalizeHostingImageUrl,
   extractImagesFromHtml,
   extractImagesFromDocument,
-  extractImagesFromPhotoTourModal,
+  extractRoomsFromPhotoTourModal,
   hostingIdFromUrl,
   finalizeImageUrls,
 };
+
+}

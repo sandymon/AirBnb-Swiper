@@ -1,3 +1,6 @@
+if (!globalThis.__stayScoutParserReady) {
+globalThis.__stayScoutParserReady = true;
+
 const AMENITY_RULES = [
   { label: "Pool", patterns: [/pool/i] },
   { label: "Hot tub", patterns: [/hot tub/i] },
@@ -414,4 +417,6 @@ function scrapeAirbnbPage() {
     amenities: parsed.amenities || [],
     images: scrapeListingImages(),
   };
+}
+
 }

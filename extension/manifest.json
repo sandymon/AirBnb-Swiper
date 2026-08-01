@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StayScout Scraper",
-  "version": "1.8",
+  "version": "1.12",
   "description": "Extract stay information from Airbnb listings and send to StayScout.",
   "permissions": ["activeTab", "scripting", "tabs"],
   "host_permissions": [

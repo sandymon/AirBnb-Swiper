@@ -107,6 +107,18 @@ if (!globalThis.__stayScoutScraperReady) {
 
   async function scrollModalToLoadImages(modal) {
     const container = getModalScrollContainer(modal);
+
+    // Airbnb only mounts each room section's photos once it's scrolled near the
+    // viewport, so jumping straight to scrollTop = scrollHeight skips right past
+    // most sections and leaves them at their single cover photo. Step through the
+    // modal instead so every section actually passes through view.
+    let position = 0;
+    for (let pass = 0; pass < 80 && position < container.scrollHeight; pass += 1) {
+      position += Math.max(200, Math.floor(container.clientHeight * 0.8));
+      container.scrollTop = position;
+      await sleep(150);
+    }
+
     let stablePasses = 0;
     let lastCount = 0;
 
@@ -130,18 +142,31 @@ if (!globalThis.__stayScoutScraperReady) {
     await sleep(200);
   }
 
-  async function extractPhotoTourImages() {
-    const modal = await openPhotoTourModal();
-    await scrollModalToLoadImages(modal);
+  // Runs the photo tour on top of the regular scrape so one click gets both the
+  // listing details and the full, room-tagged photo set — the tour's images
+  // replace the scraper's smaller/uncategorized image list when it succeeds, and
+  // fall back to whatever scrapeAirbnbPage() already found if the tour can't open.
+  async function scrapeListingWithPhotoTour() {
+    const listing = scrapeAirbnbPage();
 
-    const images = globalThis.stayScoutImageExtractor.extractImagesFromPhotoTourModal(modal, listingUrl());
+    try {
+      const modal = await openPhotoTourModal();
+      await scrollModalToLoadImages(modal);
 
-    return {
-      url: listingUrl(),
-      images,
-      photosOnly: true,
-      title: document.querySelector("h1")?.textContent?.trim() || "Listing",
-    };
+      const { images, rooms } = globalThis.stayScoutImageExtractor.extractRoomsFromPhotoTourModal(
+        modal,
+        listingUrl(),
+      );
+
+      if (images.length) {
+        listing.images = images;
+        listing.rooms = rooms;
+      }
+    } catch {
+      // Photo tour unavailable; keep the images scrapeAirbnbPage() already found.
+    }
+
+    return listing;
   }
 
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
@@ -149,25 +174,8 @@ if (!globalThis.__stayScoutScraperReady) {
       (async () => {
         try {
           await waitForListingPhotoData();
-          const listing = scrapeAirbnbPage();
+          const listing = await scrapeListingWithPhotoTour();
           sendResponse({ success: true, listing, imageCount: listing.images?.length || 0 });
-        } catch (error) {
-          sendResponse({ success: false, error: error.message });
-        }
-      })();
-
-      return true;
-    }
-
-    if (request.action === "extractPhotoTour") {
-      (async () => {
-        try {
-          const payload = await extractPhotoTourImages();
-          sendResponse({
-            success: true,
-            listing: payload,
-            imageCount: payload.images?.length || 0,
-          });
         } catch (error) {
           sendResponse({ success: false, error: error.message });
         }
