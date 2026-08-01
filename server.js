@@ -152,11 +152,11 @@ async function handleVote(request, response) {
     const body = rawBody ? JSON.parse(rawBody) : {};
     const voterId = body.voterId || "";
     const voterName = body.voterName || "";
-    const listingId = body.listingId;
+    const listingId = body.listingId || "";
 
     const votes =
-      listingId == null || listingId === ""
-        ? db.removeVote(voterId)
+      body.vote === false
+        ? db.removeVote(voterId, listingId)
         : db.castVote(voterId, voterName, listingId);
 
     sendJson(response, 200, { ok: true, votes });

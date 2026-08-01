@@ -20,12 +20,42 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS votes (
-    voter_id TEXT PRIMARY KEY,
+    voter_id TEXT NOT NULL,
     listing_id TEXT NOT NULL,
     voter_name TEXT NOT NULL,
-    voted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    voted_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (voter_id, listing_id)
   );
 `);
+
+// Older deployments created `votes` with voter_id alone as the primary key,
+// which allowed only one vote per person total. Migrate those in place to
+// the (voter_id, listing_id) composite key so a person can vote for several
+// listings, still capped at one vote per person per listing.
+(function migrateSingleVotePerVoterSchema() {
+  const columns = db.prepare("PRAGMA table_info(votes)").all();
+  const listingIdIsPrimaryKey = columns.some((column) => column.name === "listing_id" && column.pk > 0);
+  if (listingIdIsPrimaryKey) {
+    return;
+  }
+
+  db.exec(`
+    ALTER TABLE votes RENAME TO votes_legacy_single_vote;
+
+    CREATE TABLE votes (
+      voter_id TEXT NOT NULL,
+      listing_id TEXT NOT NULL,
+      voter_name TEXT NOT NULL,
+      voted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (voter_id, listing_id)
+    );
+
+    INSERT INTO votes (voter_id, listing_id, voter_name, voted_at)
+      SELECT voter_id, listing_id, voter_name, voted_at FROM votes_legacy_single_vote;
+
+    DROP TABLE votes_legacy_single_vote;
+  `);
+})();
 
 const statements = {
   selectListings: db.prepare("SELECT id, data FROM listings ORDER BY position ASC"),
@@ -41,12 +71,11 @@ const statements = {
   upsertVote: db.prepare(
     `INSERT INTO votes (voter_id, listing_id, voter_name, voted_at)
      VALUES (?, ?, ?, datetime('now'))
-     ON CONFLICT(voter_id) DO UPDATE SET
-       listing_id = excluded.listing_id,
+     ON CONFLICT(voter_id, listing_id) DO UPDATE SET
        voter_name = excluded.voter_name,
        voted_at = datetime('now')`,
   ),
-  deleteVote: db.prepare("DELETE FROM votes WHERE voter_id = ?"),
+  deleteVote: db.prepare("DELETE FROM votes WHERE voter_id = ? AND listing_id = ?"),
   deleteVotesForListing: db.prepare("DELETE FROM votes WHERE listing_id = ?"),
   deleteVotesNotInListings: db.prepare("DELETE FROM votes WHERE listing_id NOT IN (SELECT id FROM listings)"),
 };
@@ -106,13 +135,18 @@ function castVote(voterId, voterName, listingId) {
   return getVotes();
 }
 
-function removeVote(voterId) {
+function removeVote(voterId, listingId) {
   const id = String(voterId || "").trim();
+  const listing = String(listingId || "").trim();
+
   if (!id) {
     throw new Error("Voter id is required.");
   }
+  if (!listing) {
+    throw new Error("Listing id is required.");
+  }
 
-  statements.deleteVote.run(id);
+  statements.deleteVote.run(id, listing);
   return getVotes();
 }
 
