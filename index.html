@@ -34,6 +34,14 @@
         </div>
       </header>
 
+      <div id="fullscreenPrompt" class="fullscreen-prompt" hidden>
+        <span>Get the full-screen app experience</span>
+        <button id="fullscreenEnableBtn" class="fullscreen-enable-btn" type="button">Go fullscreen</button>
+        <button id="fullscreenDismissBtn" class="fullscreen-dismiss-btn" type="button" aria-label="Dismiss">
+          ✕
+        </button>
+      </div>
+
       <p id="travelStatus" class="status status--floating" aria-live="polite" hidden></p>
 
       <section id="swipeView" class="swipe-arena swipe-arena--focus" aria-live="polite">
@@ -76,6 +84,81 @@
       </section>
     </main>
 
+    <div id="onboardingOverlay" class="onboarding-overlay" hidden>
+      <div class="onboarding-backdrop"></div>
+      <div
+        class="onboarding-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboardingTitle"
+        tabindex="-1"
+      >
+        <button class="onboarding-skip" type="button" data-onboarding-skip>Skip</button>
+
+        <section class="onboarding-step" data-step="0">
+          <div class="onboarding-visual onboarding-visual--emoji" aria-hidden="true">🏡</div>
+          <h2 id="onboardingTitle">Welcome to StayScout</h2>
+          <p>
+            Swipe through stays your group is considering, vote on favorites, and compare travel
+            time — all in one place.
+          </p>
+        </section>
+
+        <section class="onboarding-step" data-step="1">
+          <div class="onboarding-visual" aria-hidden="true">
+            <div class="onboarding-demo-card">
+              <span class="onboarding-demo-stamp onboarding-demo-stamp--nope">NOPE</span>
+              <span class="onboarding-demo-stamp onboarding-demo-stamp--vote">VOTE</span>
+            </div>
+          </div>
+          <h2>Swipe to vote</h2>
+          <p>Drag a card left to pass, right to vote — or use the buttons below the deck.</p>
+          <div class="onboarding-btn-row">
+            <span class="onboarding-btn-demo onboarding-btn-demo--pass" aria-hidden="true">✕</span>
+            <span class="onboarding-btn-demo onboarding-btn-demo--info" aria-hidden="true">i</span>
+            <span class="onboarding-btn-demo onboarding-btn-demo--like" aria-hidden="true">♥</span>
+          </div>
+          <div class="onboarding-btn-labels">
+            <small>Pass</small>
+            <small>Details</small>
+            <small>Vote</small>
+          </div>
+        </section>
+
+        <section class="onboarding-step" data-step="2">
+          <div class="onboarding-visual onboarding-visual--emoji" aria-hidden="true">⚙️</div>
+          <h2>Set your home base</h2>
+          <p>
+            Open settings to add your name, search a starting address with live suggestions, and
+            see drive or transit time to every stay.
+          </p>
+        </section>
+
+        <section class="onboarding-step" data-step="3">
+          <div class="onboarding-visual onboarding-visual--emoji" aria-hidden="true">🏆</div>
+          <h2>Compare and decide together</h2>
+          <p>
+            Once everyone's swiped, "All stays" shows every pick sorted by votes, price, rating, or
+            distance — with a leaderboard of the group's favorites. Tap the <strong>i</strong> button
+            (or any card) to see full details and photos grouped by room.
+          </p>
+        </section>
+
+        <div class="onboarding-footer">
+          <div class="onboarding-dots" aria-hidden="true">
+            <span class="onboarding-dot" data-dot="0"></span>
+            <span class="onboarding-dot" data-dot="1"></span>
+            <span class="onboarding-dot" data-dot="2"></span>
+            <span class="onboarding-dot" data-dot="3"></span>
+          </div>
+          <div class="onboarding-nav">
+            <button class="onboarding-back" type="button" data-onboarding-back hidden>Back</button>
+            <button class="onboarding-next" type="button" data-onboarding-next>Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="settingsOverlay" class="settings-overlay" hidden>
       <div class="settings-backdrop" data-close-settings></div>
       <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">
@@ -98,6 +181,14 @@
           <p class="hint">Clear your swipe progress and go through all stays again from the top.</p>
           <button id="settingsResetVotingBtn" class="reset-voting-btn reset-voting-btn--wide" type="button">
             Vote again
+          </button>
+        </section>
+
+        <section class="settings-section">
+          <span class="settings-section-label">Help</span>
+          <p class="hint">Replay the welcome guide explaining how StayScout works.</p>
+          <button id="replayOnboardingBtn" class="reset-voting-btn reset-voting-btn--wide" type="button">
+            Show app guide
           </button>
         </section>
 
@@ -178,6 +269,9 @@
           </button>
           <span class="gallery-counter" hidden></span>
         </div>
+
+        <div class="gallery-rooms" hidden></div>
+        <p class="gallery-caption" hidden></p>
 
         <div class="listing-detail-body">
           <div class="listing-detail-badges">
