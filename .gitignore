@@ -1,0 +1,6 @@
+images/
+stayscout.db
+stayscout.db-wal
+stayscout.db-shm
+.env
+*.log

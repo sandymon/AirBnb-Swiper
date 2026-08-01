@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>StayScout Extension</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 14px;
+      width: 260px;
+      margin: 0;
+    }
+
+    h3 {
+      margin: 0 0 4px;
+      font-size: 15px;
+    }
+
+    p {
+      margin: 0 0 12px;
+      color: #555;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: #e11d48;
+      color: white;
+      font-weight: 600;
+    }
+
+    button.secondary {
+      background: white;
+      color: #e11d48;
+      border: 1px solid #e11d48;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    #status {
+      margin-top: 10px;
+      font-size: 12px;
+      line-height: 1.4;
+      min-height: 34px;
+    }
+
+    #status.pending {
+      color: #555;
+    }
+
+    #status.success {
+      color: #15803d;
+    }
+
+    #status.error {
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <h3>StayScout Scraper</h3>
+  <p>Open an Airbnb listing, then extract it into your StayScout board.</p>
+  <div class="actions">
+    <button id="scrapeBtn">Extract &amp; Send</button>
+    <button id="photoTourBtn" class="secondary" type="button">Add Photos from Tour</button>
+  </div>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

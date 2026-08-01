@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080c14" />
+    <title>StayScout</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,500;0,9..40,700;0,9..40,800;1,9..40,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="top-bar">
+        <div class="brand">
+          <span class="brand-icon" aria-hidden="true">🏡</span>
+          <div>
+            <h1>StayScout</h1>
+            <p id="topBarTag" class="brand-tag">Swipe right to vote · left to pass</p>
+          </div>
+        </div>
+        <div class="top-bar-actions">
+          <span id="listingCount" class="pill">0 stays</span>
+          <button id="resetVotingBtn" class="reset-voting-btn" type="button" hidden>
+            Vote again
+          </button>
+          <button id="settingsBtn" class="gear-btn" type="button" aria-label="Open settings">
+            ⚙
+          </button>
+        </div>
+      </header>
+
+      <p id="travelStatus" class="status status--floating" aria-live="polite" hidden></p>
+
+      <section id="swipeView" class="swipe-arena swipe-arena--focus" aria-live="polite">
+        <div id="swipeStack" class="swipe-stack"></div>
+        <div class="swipe-actions">
+          <button id="swipePassBtn" class="swipe-btn swipe-btn--pass" type="button" aria-label="Pass">
+            ✕
+          </button>
+          <button id="swipeInfoBtn" class="swipe-btn swipe-btn--info" type="button" aria-label="View details">
+            i
+          </button>
+          <button id="swipeLikeBtn" class="swipe-btn swipe-btn--like" type="button" aria-label="Vote for this stay">
+            ♥
+          </button>
+        </div>
+        <p class="swipe-hint-text">Drag the card or tap the buttons · set your name in ⚙ to vote</p>
+      </section>
+
+      <section id="homeView" class="home-screen" hidden>
+        <div class="home-screen-head">
+          <div>
+            <h2 class="home-screen-title">All stays</h2>
+            <p class="home-screen-sub">Compare picks and see who's winning</p>
+          </div>
+          <div class="home-screen-actions">
+            <select id="sortBy" class="sort-select" aria-label="Sort listings">
+              <option value="votes">Most votes</option>
+              <option value="time">Closest first</option>
+              <option value="price">Cheapest first</option>
+              <option value="rating">Top rated</option>
+            </select>
+            <button id="swipeAgainBtn" class="swipe-again-btn" type="button">Vote again</button>
+          </div>
+        </div>
+        <section id="resultsGrid" class="stay-grid"></section>
+        <section id="homeLeaderboard" class="swipe-leaderboard" hidden>
+          <h2 class="leaderboard-title">Group picks</h2>
+          <ol id="leaderboardList" class="leaderboard-list"></ol>
+        </section>
+      </section>
+    </main>
+
+    <div id="settingsOverlay" class="settings-overlay" hidden>
+      <div class="settings-backdrop" data-close-settings></div>
+      <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">
+        <button class="settings-close" type="button" data-close-settings aria-label="Close settings">✕</button>
+        <h2 id="settingsTitle" class="settings-title">Settings</h2>
+
+        <label class="field">
+          <span>Your name (for voting)</span>
+          <input
+            id="voterNameInput"
+            type="text"
+            placeholder="e.g. Alex"
+            maxlength="32"
+            autocomplete="nickname"
+          />
+        </label>
+
+        <section class="settings-section">
+          <span class="settings-section-label">Voting</span>
+          <p class="hint">Clear your swipe progress and go through all stays again from the top.</p>
+          <button id="settingsResetVotingBtn" class="reset-voting-btn reset-voting-btn--wide" type="button">
+            Vote again
+          </button>
+        </section>
+
+        <section class="settings-section">
+          <span class="settings-section-label">Home base</span>
+          <p id="homeBaseSummary" class="home-base-summary">New York City · New York, NY, USA</p>
+          <label class="field">
+            <span>Change starting location</span>
+            <input
+              id="anchorSearchInput"
+              type="text"
+              placeholder="Search an address"
+              autocomplete="off"
+            />
+          </label>
+          <ul id="anchorList" class="anchor-chips" aria-label="Saved home locations"></ul>
+        </section>
+
+        <section class="settings-section">
+          <span class="settings-section-label">Maps</span>
+          <div class="field">
+            <span>Google Maps API key</span>
+            <p id="mapsKeyStatus" class="key-status">Checking server configuration…</p>
+          </div>
+          <p class="hint">
+            Set <code>GOOGLE_MAPS_API_KEY</code> in the server's <code>.env</code> file, then restart
+            the server.
+          </p>
+          <label class="field">
+            <span>Travel mode</span>
+            <select id="travelMode">
+              <option value="driving">Driving</option>
+              <option value="transit">Transit</option>
+              <option value="walking">Walking</option>
+            </select>
+          </label>
+          <select id="anchorSelect" hidden aria-hidden="true"></select>
+        </section>
+      </div>
+    </div>
+
+    <div id="listingDetailOverlay" class="listing-detail-overlay" hidden>
+      <div class="listing-detail-backdrop" data-close-detail></div>
+      <div
+        class="listing-detail-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="listingDetailTitle"
+        tabindex="-1"
+      >
+        <button class="listing-detail-close" type="button" data-close-detail aria-label="Close">
+          ✕
+        </button>
+
+        <div class="listing-detail-gallery">
+          <button
+            class="gallery-nav gallery-prev"
+            type="button"
+            aria-label="Previous photo"
+            hidden
+          >
+            ‹
+          </button>
+          <div class="gallery-stage">
+            <img class="gallery-image" alt="" />
+            <p class="gallery-empty" hidden>No photos yet</p>
+            <button
+              class="gallery-fullscreen"
+              type="button"
+              aria-label="View photos fullscreen"
+              hidden
+            >
+              ⤢
+            </button>
+          </div>
+          <button class="gallery-nav gallery-next" type="button" aria-label="Next photo" hidden>
+            ›
+          </button>
+          <span class="gallery-counter" hidden></span>
+        </div>
+
+        <div class="listing-detail-body">
+          <div class="listing-detail-badges">
+            <div class="drive-badge">
+              <span class="drive-label">Drive</span>
+              <strong class="drive-time detail-drive-time"></strong>
+            </div>
+            <button class="price-badge" type="button">
+              <span class="price detail-price"></span>
+              <span class="price-unit detail-price-unit">/ night</span>
+              <span class="price-breakdown detail-price-breakdown" hidden></span>
+            </button>
+          </div>
+          <h2 id="listingDetailTitle" class="detail-title"></h2>
+          <p class="detail-area"></p>
+          <div class="detail-facts stay-facts"></div>
+          <div class="detail-amenities amenities"></div>
+          <div class="listing-detail-actions">
+            <button class="vote-button detail-vote-button" type="button">
+              <span class="vote-icon" aria-hidden="true">♥</span>
+              <span class="vote-count detail-vote-count">0</span>
+              <span class="vote-label">Vote</span>
+            </button>
+            <p class="vote-voters detail-vote-voters" hidden></p>
+            <a class="listing-link detail-link" target="_blank" rel="noreferrer">Open on Airbnb</a>
+            <button class="icon-button detail-remove" type="button">Remove stay</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="photoLightbox" class="photo-lightbox" hidden>
+      <div class="photo-lightbox-backdrop" data-close-lightbox></div>
+      <button
+        class="photo-lightbox-close"
+        type="button"
+        data-close-lightbox
+        aria-label="Close fullscreen"
+      >
+        ✕
+      </button>
+      <button class="lightbox-nav lightbox-prev" type="button" aria-label="Previous photo" hidden>
+        ‹
+      </button>
+      <figure class="photo-lightbox-stage">
+        <img class="lightbox-image" alt="" />
+      </figure>
+      <button class="lightbox-nav lightbox-next" type="button" aria-label="Next photo" hidden>
+        ›
+      </button>
+      <span class="lightbox-counter" hidden></span>
+    </div>
+
+    <template id="swipeCardTemplate">
+      <article class="swipe-card">
+        <div class="swipe-card-photo">
+          <img class="swipe-photo" alt="" />
+          <p class="swipe-photo-empty" hidden>No photo yet</p>
+          <span class="swipe-stamp swipe-stamp--nope">NOPE</span>
+          <span class="swipe-stamp swipe-stamp--like">VOTE</span>
+        </div>
+        <div class="swipe-card-info">
+          <div class="swipe-card-badges">
+            <div class="drive-badge">
+              <span class="drive-label">Drive</span>
+              <strong class="drive-time"></strong>
+            </div>
+            <div class="price-badge swipe-price-badge">
+              <span class="price"></span>
+              <span class="price-unit">/ night</span>
+            </div>
+          </div>
+          <h2 class="swipe-card-title"></h2>
+          <p class="swipe-card-area"></p>
+          <div class="swipe-card-facts stay-facts"></div>
+          <div class="swipe-card-votes">
+            <span class="vote-icon" aria-hidden="true">♥</span>
+            <span class="swipe-vote-count">0</span>
+            <span class="swipe-voter-names"></span>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <template id="listingCardTemplate">
+      <article class="stay-card">
+        <div class="stay-photo-wrap">
+          <img class="stay-photo" alt="" loading="lazy" />
+          <span class="photo-count"></span>
+        </div>
+        <div class="stay-card-top">
+          <div class="drive-badge">
+            <span class="drive-label">Drive</span>
+            <strong class="drive-time"></strong>
+          </div>
+          <button class="price-badge" type="button">
+            <span class="price"></span>
+            <span class="price-unit">/ night</span>
+            <span class="price-breakdown" hidden></span>
+          </button>
+        </div>
+        <h2 class="stay-title"></h2>
+        <p class="stay-area"></p>
+        <div class="stay-facts"></div>
+        <div class="amenities"></div>
+        <div class="stay-actions">
+          <button class="vote-button" type="button" aria-label="Vote for this stay">
+            <span class="vote-icon" aria-hidden="true">♥</span>
+            <span class="vote-count">0</span>
+          </button>
+          <a class="listing-link" target="_blank" rel="noreferrer">Open on Airbnb</a>
+          <button class="icon-button remove-button" type="button" aria-label="Remove stay">✕</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
