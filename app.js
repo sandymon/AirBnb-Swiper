@@ -51,11 +51,11 @@ const api = {
     }
     return data;
   },
-  async castVote(voterId, voterName, listingId) {
+  async setVote(voterId, voterName, listingId, vote) {
     const response = await fetch("/api/votes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voterId, voterName, listingId }),
+      body: JSON.stringify({ voterId, voterName, listingId, vote }),
     });
     const data = await parseJsonResponse(response);
     if (!response.ok) {
@@ -458,17 +458,8 @@ function getVotersForListing(listingId) {
   return voteData.byListing[listingId] || [];
 }
 
-function getMyVotedListingId() {
-  for (const [listingId, voters] of Object.entries(voteData.byListing)) {
-    if (voters.some((voter) => voter.voterId === voterId)) {
-      return listingId;
-    }
-  }
-  return null;
-}
-
 function isVotedByMe(listingId) {
-  return getMyVotedListingId() === listingId;
+  return getVotersForListing(listingId).some((voter) => voter.voterId === voterId);
 }
 
 function getLeadingListingId() {
@@ -528,7 +519,7 @@ async function voteForListing(listingId) {
   }
 
   try {
-    voteData = await api.castVote(voterId, name, listingId);
+    voteData = await api.setVote(voterId, name, listingId, true);
     return true;
   } catch (error) {
     setTravelStatus(error.message, true);
@@ -548,8 +539,8 @@ async function toggleVote(listingId) {
   saveVoterName(name);
 
   try {
-    const nextListingId = isVotedByMe(listingId) ? null : listingId;
-    voteData = await api.castVote(voterId, name, nextListingId);
+    const nextVote = !isVotedByMe(listingId);
+    voteData = await api.setVote(voterId, name, listingId, nextVote);
     render();
 
     if (detailContext?.listing.id === listingId) {
