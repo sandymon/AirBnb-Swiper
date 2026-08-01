@@ -43,9 +43,17 @@ dest.exec(`
   );
 `);
 
+// The source machine's images/ directory (locally cached photo files) doesn't
+// travel with this seed, so any localImages/localImageMap pointing at it would
+// just 404 on a fresh server. Strip those and fall back to the original
+// remote Airbnb CDN URLs, which work standalone.
 const insertListing = dest.prepare("INSERT INTO listings (id, data, position) VALUES (?, ?, ?)");
 for (const row of listings) {
-  insertListing.run(row.id, row.data, row.position);
+  const listing = JSON.parse(row.data);
+  delete listing.localImages;
+  delete listing.localImageMap;
+  listing.image = listing.images?.[0] || listing.image || "";
+  insertListing.run(row.id, JSON.stringify(listing), row.position);
 }
 dest.close();
 
