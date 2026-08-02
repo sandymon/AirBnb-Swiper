@@ -193,7 +193,12 @@ async function calculateTravelTimes({ anchors, destination, mode = "driving", go
     throw new Error("Add at least one starting location first.");
   }
 
-  const serverApiKey = process.env.GOOGLE_MAPS_API_KEY;
+  // Distance Matrix is called directly from this server, not a browser, so it
+  // has no Referer header — a referrer-restricted key (the right choice for
+  // the client-side Maps/Places key below) gets rejected with "API keys with
+  // referer restrictions cannot be used with this API." Use a separate,
+  // IP-or-unrestricted key for this call when one is configured.
+  const serverApiKey = process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY;
   const apiKey = serverApiKey || googleApiKey;
 
   if (!apiKey && mode !== "driving") {
