@@ -28,6 +28,22 @@
       gap: 8px;
     }
 
+    label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #555;
+    }
+
+    input {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 12px;
+      margin: 4px 0 12px;
+    }
+
     button {
       width: 100%;
       padding: 10px;
@@ -67,6 +83,8 @@
 <body>
   <h3>StayScout Scraper</h3>
   <p>Open an Airbnb listing, then extract it into your StayScout board.</p>
+  <label for="stayScoutUrlInput">StayScout URL</label>
+  <input id="stayScoutUrlInput" type="text" placeholder="http://localhost:5173/" />
   <div class="actions">
     <button id="scrapeBtn">Extract &amp; Send</button>
   </div>

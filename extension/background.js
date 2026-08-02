@@ -1,14 +1,20 @@
 importScripts("image-extractor.js");
 
-const STAYSCOUT_URL = "http://localhost:5173/";
+const DEFAULT_STAYSCOUT_URL = "http://localhost:5173/";
 
-async function findStayScoutTab() {
-  const tabs = await chrome.tabs.query({ url: "http://localhost:5173/*" });
+async function getStayScoutUrl() {
+  const stored = await chrome.storage.local.get("stayScoutUrl");
+  return stored.stayScoutUrl || DEFAULT_STAYSCOUT_URL;
+}
+
+async function findStayScoutTab(targetUrl) {
+  const origin = new URL(targetUrl).origin;
+  const tabs = await chrome.tabs.query({ url: `${origin}/*` });
   return tabs[0];
 }
 
-async function openStayScoutTab() {
-  return chrome.tabs.create({ url: STAYSCOUT_URL, active: true });
+async function openStayScoutTab(targetUrl) {
+  return chrome.tabs.create({ url: targetUrl, active: true });
 }
 
 async function sendListingToTab(tabId, listing) {
@@ -34,10 +40,11 @@ async function sendListingToTab(tabId, listing) {
 }
 
 async function relayListingToStayScout(listing) {
-  let tab = await findStayScoutTab();
+  const targetUrl = await getStayScoutUrl();
+  let tab = await findStayScoutTab(targetUrl);
 
   if (!tab) {
-    tab = await openStayScoutTab();
+    tab = await openStayScoutTab(targetUrl);
     await waitForTabLoad(tab.id);
     await new Promise((resolve) => setTimeout(resolve, 500));
   } else {

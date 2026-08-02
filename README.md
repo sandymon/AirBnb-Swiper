@@ -27,6 +27,11 @@ A self-hosted trip-planning tool for groups deciding on an Airbnb together. Scra
 
    Set `GOOGLE_MAPS_API_KEY` in `.env` if you have one. `PORT` defaults to `5173`.
 
+   If you restrict that key by HTTP referrer (recommended once it's exposed on
+   a public deployment), also set `GOOGLE_MAPS_SERVER_KEY` to a second,
+   separately-restricted key for server-side travel-time calls — see the
+   comments in `.env.example` for why one key can't safely do both jobs.
+
 2. **Run the server**
 
    ```bash
