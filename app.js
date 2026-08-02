@@ -129,6 +129,16 @@ const onboardingBackBtn = document.querySelector("[data-onboarding-back]");
 const onboardingNextBtn = document.querySelector("[data-onboarding-next]");
 const onboardingSkipBtn = document.querySelector("[data-onboarding-skip]");
 const replayOnboardingBtn = document.querySelector("#replayOnboardingBtn");
+const editListingOverlay = document.querySelector("#editListingOverlay");
+const editListingForm = document.querySelector("#editListingForm");
+const editFields = {
+  price: document.querySelector("#editPrice"),
+  nights: document.querySelector("#editNights"),
+  guests: document.querySelector("#editGuests"),
+  bedrooms: document.querySelector("#editBedrooms"),
+  beds: document.querySelector("#editBeds"),
+  baths: document.querySelector("#editBaths"),
+};
 
 const detailFields = {
   panel: listingDetailOverlay?.querySelector(".listing-detail-panel"),
@@ -155,6 +165,7 @@ const detailFields = {
   voteCount: listingDetailOverlay?.querySelector(".detail-vote-count"),
   voteVoters: listingDetailOverlay?.querySelector(".detail-vote-voters"),
   remove: listingDetailOverlay?.querySelector(".detail-remove"),
+  edit: listingDetailOverlay?.querySelector(".detail-edit"),
 };
 
 const lightboxFields = {
@@ -189,6 +200,8 @@ let selectedAnchorId = "";
 let mapsSettings = {};
 let serverGoogleKey = "";
 let allowRemoveListings = true;
+let allowEditListings = true;
+let editingListingId = null;
 let hydrating = true;
 let placesAutocomplete = null;
 let googleMapsLoadPromise = null;
@@ -370,6 +383,96 @@ function setupOnboarding() {
   if (!localStorage.getItem(onboardingSeenKey)) {
     openOnboarding();
   }
+}
+
+function openEditListing(listing) {
+  if (!editListingOverlay) {
+    return;
+  }
+
+  editingListingId = listing.id;
+  editFields.price.value = listing.price ?? "";
+  editFields.nights.value = listing.priceNights ?? "";
+  editFields.guests.value = listing.guests ?? "";
+  editFields.bedrooms.value = listing.bedrooms ?? "";
+  editFields.beds.value = listing.beds ?? "";
+  editFields.baths.value = listing.baths ?? "";
+
+  editListingOverlay.hidden = false;
+  document.body.classList.add("edit-listing-open");
+  editListingOverlay.querySelector(".edit-listing-panel")?.focus();
+}
+
+function closeEditListing() {
+  if (!editListingOverlay) {
+    return;
+  }
+
+  editListingOverlay.hidden = true;
+  document.body.classList.remove("edit-listing-open");
+  editingListingId = null;
+}
+
+function readEditNumber(input, { allowDecimal = false } = {}) {
+  const raw = input.value.trim();
+  if (!raw) {
+    return undefined;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return allowDecimal ? parsed : Math.round(parsed);
+}
+
+function setupEditListingOverlay() {
+  if (!editListingOverlay) {
+    return;
+  }
+
+  editListingOverlay.querySelectorAll("[data-close-edit]").forEach((element) => {
+    element.addEventListener("click", closeEditListing);
+  });
+
+  editListingForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    if (!allowEditListings) {
+      closeEditListing();
+      return;
+    }
+
+    const listing = listings.find((item) => item.id === editingListingId);
+    if (!listing) {
+      closeEditListing();
+      return;
+    }
+
+    listing.price = readEditNumber(editFields.price);
+    listing.priceNights = readEditNumber(editFields.nights);
+    listing.priceTotal =
+      listing.price != null && listing.priceNights != null ? listing.price * listing.priceNights : undefined;
+    listing.guests = readEditNumber(editFields.guests);
+    listing.bedrooms = readEditNumber(editFields.bedrooms);
+    listing.beds = readEditNumber(editFields.beds);
+    listing.baths = readEditNumber(editFields.baths, { allowDecimal: true });
+
+    saveListings();
+    closeEditListing();
+
+    if (detailContext?.listing.id === listing.id) {
+      populateListingDetail();
+    }
+    render();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!editListingOverlay.hidden && event.key === "Escape") {
+      closeEditListing();
+    }
+  });
 }
 
 function setTravelStatus(message, isError = false) {
@@ -883,6 +986,7 @@ async function loadServerConfig() {
     const config = await api.getConfig();
     serverGoogleKey = config.googleMapsApiKey || "";
     allowRemoveListings = config.allowRemoveListings !== false;
+    allowEditListings = config.allowEditListings !== false;
   } catch (error) {
     serverGoogleKey = "";
     console.error("StayScout: could not load server configuration.", error);
@@ -1740,6 +1844,9 @@ function populateListingDetail() {
   if (detailFields.remove) {
     detailFields.remove.hidden = !allowRemoveListings;
   }
+  if (detailFields.edit) {
+    detailFields.edit.hidden = !allowEditListings;
+  }
 
   const voterNames = formatVoterNames(listing.id);
   if (voterNames) {
@@ -1827,6 +1934,14 @@ function setupListingDetailOverlay() {
     saveListings();
     await refreshVotes();
     render();
+  });
+
+  detailFields.edit?.addEventListener("click", () => {
+    if (!detailContext || !allowEditListings) {
+      return;
+    }
+
+    openEditListing(detailContext.listing);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -2351,6 +2466,7 @@ async function init() {
   setupSettingsOverlay();
   setupFullscreenPrompt();
   setupOnboarding();
+  setupEditListingOverlay();
   voterId = getVoterId();
 
   if (fields.voterNameInput) {

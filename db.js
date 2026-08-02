@@ -170,32 +170,67 @@ function getState() {
   };
 }
 
+// Fields a person edits by hand (via the "Edit details" form) — locked when
+// ALLOW_EDIT_LISTINGS=false, as opposed to fields the app itself keeps
+// updating automatically (photos, cached images, travel times), which must
+// keep flowing through regardless.
+const USER_EDITABLE_FIELDS = ["price", "priceNights", "priceTotal", "guests", "bedrooms", "beds", "baths"];
+
+function loadExistingListingsById() {
+  const byId = new Map();
+  for (const row of statements.selectListings.all()) {
+    try {
+      byId.set(String(row.id), JSON.parse(row.data));
+    } catch {
+      // Skip rows that fail to parse.
+    }
+  }
+  return byId;
+}
+
 // When preserveExisting is set (ALLOW_REMOVE_LISTINGS=false), any listing
 // currently stored but missing from `items` is kept rather than dropped, so
 // the public-facing app can't remove listings — only add/edit/vote on them.
-function replaceListings(items, { preserveExisting = false } = {}) {
+// When lockEditableFields is set (ALLOW_EDIT_LISTINGS=false), USER_EDITABLE_FIELDS
+// on any already-existing listing are reset to their stored values regardless
+// of what the incoming payload says, so hand-edits can't slip through while
+// automatic updates (image caching, travel times) still apply normally.
+function replaceListings(items, { preserveExisting = false, lockEditableFields = false } = {}) {
   const incoming = Array.isArray(items) ? items : [];
   let finalList = incoming;
 
   db.exec("BEGIN");
   try {
+    const existingById = preserveExisting || lockEditableFields ? loadExistingListingsById() : null;
+
+    if (lockEditableFields) {
+      finalList = finalList.map((listing) => {
+        if (!listing || listing.id == null) {
+          return listing;
+        }
+
+        const existing = existingById.get(String(listing.id));
+        if (!existing) {
+          return listing;
+        }
+
+        const locked = { ...listing };
+        for (const field of USER_EDITABLE_FIELDS) {
+          locked[field] = existing[field];
+        }
+        return locked;
+      });
+    }
+
     if (preserveExisting) {
       const incomingIds = new Set(
-        incoming.filter((listing) => listing?.id != null).map((listing) => String(listing.id)),
+        finalList.filter((listing) => listing?.id != null).map((listing) => String(listing.id)),
       );
-      const preserved = statements.selectListings
-        .all()
-        .filter((row) => !incomingIds.has(String(row.id)))
-        .map((row) => {
-          try {
-            return JSON.parse(row.data);
-          } catch {
-            return null;
-          }
-        })
-        .filter(Boolean);
+      const preserved = [...existingById.entries()]
+        .filter(([id]) => !incomingIds.has(id))
+        .map(([, listing]) => listing);
 
-      finalList = [...incoming, ...preserved];
+      finalList = [...finalList, ...preserved];
     }
 
     statements.deleteAllListings.run();

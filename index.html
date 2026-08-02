@@ -297,9 +297,55 @@
             </button>
             <p class="vote-voters detail-vote-voters" hidden></p>
             <a class="listing-link detail-link" target="_blank" rel="noreferrer">Open on Airbnb</a>
+            <button class="icon-button detail-edit" type="button">Edit details</button>
             <button class="icon-button detail-remove" type="button">Remove stay</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="editListingOverlay" class="edit-listing-overlay" hidden>
+      <div class="edit-listing-backdrop" data-close-edit></div>
+      <div
+        class="edit-listing-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="editListingTitle"
+        tabindex="-1"
+      >
+        <button class="edit-listing-close" type="button" data-close-edit aria-label="Close">✕</button>
+        <h2 id="editListingTitle">Edit stay details</h2>
+        <p class="hint">Fix anything the scraper got wrong — this only changes what's saved here.</p>
+
+        <form id="editListingForm">
+          <div class="edit-listing-grid">
+            <label class="field">
+              <span>Price per night</span>
+              <input id="editPrice" type="number" min="0" step="1" inputmode="decimal" />
+            </label>
+            <label class="field">
+              <span>Nights</span>
+              <input id="editNights" type="number" min="1" step="1" inputmode="numeric" />
+            </label>
+            <label class="field">
+              <span>Guests</span>
+              <input id="editGuests" type="number" min="1" step="1" inputmode="numeric" />
+            </label>
+            <label class="field">
+              <span>Bedrooms</span>
+              <input id="editBedrooms" type="number" min="0" step="1" inputmode="numeric" />
+            </label>
+            <label class="field">
+              <span>Beds</span>
+              <input id="editBeds" type="number" min="0" step="1" inputmode="numeric" />
+            </label>
+            <label class="field">
+              <span>Baths</span>
+              <input id="editBaths" type="number" min="0" step="0.5" inputmode="decimal" />
+            </label>
+          </div>
+          <button class="edit-listing-save" type="submit">Save changes</button>
+        </form>
       </div>
     </div>
 

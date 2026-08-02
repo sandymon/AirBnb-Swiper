@@ -15,6 +15,7 @@ const db = require("./db");
 const port = Number(process.env.PORT) || 5173;
 const root = __dirname;
 const allowRemoveListings = String(process.env.ALLOW_REMOVE_LISTINGS ?? "true").toLowerCase() !== "false";
+const allowEditListings = String(process.env.ALLOW_EDIT_LISTINGS ?? "true").toLowerCase() !== "false";
 // Ties app.js/styles.css to a version that changes on every server start, so a
 // CDN or browser caching them under their plain filename (a real problem we
 // hit in production behind Cloudflare) can't ever serve a stale build again.
@@ -131,6 +132,7 @@ function handleGetConfig(response) {
     googleMapsApiKey,
     hasGoogleMapsKey: Boolean(googleMapsApiKey),
     allowRemoveListings,
+    allowEditListings,
   });
 }
 
@@ -147,7 +149,10 @@ async function handleSaveListings(request, response) {
     const rawBody = await readRequestBody(request);
     const body = rawBody ? JSON.parse(rawBody) : {};
     const incoming = body.listings || [];
-    const count = db.replaceListings(incoming, { preserveExisting: !allowRemoveListings });
+    const count = db.replaceListings(incoming, {
+      preserveExisting: !allowRemoveListings,
+      lockEditableFields: !allowEditListings,
+    });
 
     if (count !== incoming.length) {
       console.log(
