@@ -15,6 +15,10 @@ const db = require("./db");
 const port = Number(process.env.PORT) || 5173;
 const root = __dirname;
 const allowRemoveListings = String(process.env.ALLOW_REMOVE_LISTINGS ?? "true").toLowerCase() !== "false";
+// Ties app.js/styles.css to a version that changes on every server start, so a
+// CDN or browser caching them under their plain filename (a real problem we
+// hit in production behind Cloudflare) can't ever serve a stale build again.
+const buildVersion = String(Date.now());
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -69,6 +73,20 @@ function serveStatic(request, response) {
     if (error) {
       response.writeHead(404);
       response.end("Not found");
+      return;
+    }
+
+    if (path.basename(filePath) === "index.html") {
+      const html = data
+        .toString("utf8")
+        .replace('src="app.js"', `src="app.js?v=${buildVersion}"`)
+        .replace('href="styles.css"', `href="styles.css?v=${buildVersion}"`);
+
+      response.writeHead(200, {
+        "Content-Type": contentTypes[".html"],
+        "Cache-Control": "no-cache",
+      });
+      response.end(html);
       return;
     }
 
