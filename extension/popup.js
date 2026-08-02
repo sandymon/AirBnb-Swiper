@@ -1,10 +1,39 @@
 const scrapeBtn = document.getElementById("scrapeBtn");
 const statusEl = document.getElementById("status");
+const stayScoutUrlInput = document.getElementById("stayScoutUrlInput");
+const DEFAULT_STAYSCOUT_URL = "http://localhost:5173/";
 
 function setStatus(message, type = "") {
   statusEl.textContent = message;
   statusEl.className = type;
 }
+
+function normalizeStayScoutUrl(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) {
+    return DEFAULT_STAYSCOUT_URL;
+  }
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    return DEFAULT_STAYSCOUT_URL;
+  }
+}
+
+async function loadStayScoutUrl() {
+  const stored = await chrome.storage.local.get("stayScoutUrl");
+  stayScoutUrlInput.value = stored.stayScoutUrl || DEFAULT_STAYSCOUT_URL;
+}
+
+async function saveStayScoutUrl() {
+  const normalized = normalizeStayScoutUrl(stayScoutUrlInput.value);
+  stayScoutUrlInput.value = normalized;
+  await chrome.storage.local.set({ stayScoutUrl: normalized });
+}
+
+loadStayScoutUrl();
+stayScoutUrlInput.addEventListener("change", saveStayScoutUrl);
 
 function isAirbnbUrl(url) {
   try {
