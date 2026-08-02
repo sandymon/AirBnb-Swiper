@@ -128,7 +128,16 @@ async function handleSaveListings(request, response) {
   try {
     const rawBody = await readRequestBody(request);
     const body = rawBody ? JSON.parse(rawBody) : {};
-    const count = db.replaceListings(body.listings || [], { preserveExisting: !allowRemoveListings });
+    const incoming = body.listings || [];
+    const count = db.replaceListings(incoming, { preserveExisting: !allowRemoveListings });
+
+    if (count !== incoming.length) {
+      console.log(
+        `[stayscout] Save request sent ${incoming.length} listing(s); kept ${count} ` +
+          `(blocked removal of ${count - incoming.length}, ALLOW_REMOVE_LISTINGS=false).`,
+      );
+    }
+
     sendJson(response, 200, { ok: true, count });
   } catch (error) {
     sendJson(response, 400, { error: error.message });
@@ -153,11 +162,13 @@ async function handleVote(request, response) {
     const voterId = body.voterId || "";
     const voterName = body.voterName || "";
     const listingId = body.listingId || "";
+    const vote = body.vote !== false;
 
-    const votes =
-      body.vote === false
-        ? db.removeVote(voterId, listingId)
-        : db.castVote(voterId, voterName, listingId);
+    console.log(
+      `[stayscout] ${voterName || voterId || "unknown"} ${vote ? "voted for" : "removed vote from"} listing ${listingId}`,
+    );
+
+    const votes = vote ? db.castVote(voterId, voterName, listingId) : db.removeVote(voterId, listingId);
 
     sendJson(response, 200, { ok: true, votes });
   } catch (error) {
